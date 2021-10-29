@@ -3,6 +3,21 @@ library(lubridate)
 library(epiextractr)
 library(vroom)
 
+# JOLTS data from Elise
+jolts_data <- read_csv("jolts.csv") %>%
+  mutate(state_fips = as.numeric(`State ID`)) %>% 
+  mutate(name = case_when(
+    str_detect(`Series name`, "levels, seas") ~ "level_sa",
+    str_detect(`Series name`, "levels, not seas") ~ "level_nsa",
+    str_detect(`Series name`, "rate, seas") ~ "rate_sa",
+    str_detect(`Series name`, "rate, not seas") ~ "rate_nsa"
+  )) %>% 
+  pivot_longer(matches("2020|2021"), names_to = "date") %>% 
+  pivot_wider(state_fips|date, names_prefix = "quit_") %>% 
+  mutate(date = str_replace(date, "\\n", " ")) %>% 
+  mutate(year = year(my(date)), month = month(my(date))) %>% 
+  select(-date) %>% 
+  filter(state_fips != 0)
 
 # CES SM data
 download_sm <- function(x) {
@@ -106,7 +121,12 @@ vax_data <- read_csv("cdc_vax.csv") %>%
   summarize(across(vax_rate|vax_1864_rate, mean)) %>% 
   ungroup()
 
-vax_cases_emp <- list(basic_data, ces_data, cases_deaths_data, vax_data) %>% 
+vax_cases_emp <- list(basic_data, 
+                      ces_data, 
+                      cases_deaths_data, 
+                      vax_data,
+                      jolts_data
+                      ) %>% 
   reduce(full_join, by = c("state_fips", "year", "month")) %>% 
   mutate(state_abb = as.character(haven::as_factor(state_fips))) %>% 
   relocate(state_fips, state_abb, year, month)
